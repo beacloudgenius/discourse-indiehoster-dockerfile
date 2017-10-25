@@ -3,12 +3,12 @@ FROM ruby:2.4.1
 ENV RAILS_ENV=production \
     RUBY_GC_MALLOC_LIMIT=90000000 \
     RUBY_GLOBAL_METHOD_CACHE_SIZE=131072 \
-    DISCOURSE_DB_HOST=postgres \
-    DISCOURSE_REDIS_HOST=redis \
+    DISCOURSE_DB_HOST=forumpostgres \
+    DISCOURSE_REDIS_HOST=forumredis \
     DISCOURSE_SERVE_STATIC_ASSETS=true \
-    GIFSICLE_VERSION=1.88 \
-    PNGQUANT_VERSION=2.8.0 \
-    DISCOURSE_VERSION=1.9.0.beta12 \
+    GIFSICLE_VERSION=1.90 \
+    PNGQUANT_VERSION=2.10.1 \
+    DISCOURSE_VERSION=1.9.0.beta13 \
     BUILD_DEPS="\
       autoconf \
       jhead \
@@ -36,6 +36,7 @@ RUN addgroup --gid 1000 discourse \
       libxml2 \
       nodejs \
       optipng \
+      libjpeg-progs \
  && npm install svgo uglify-js@"<3" -g \
  && cd /tmp \
  && curl -O http://www.lcdf.org/gifsicle/gifsicle-$GIFSICLE_VERSION.tar.gz \
@@ -63,6 +64,38 @@ RUN addgroup --gid 1000 discourse \
  && apt-get remove -y --purge ${BUILD_DEPS} \
  && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
+
+## install additional gems
+##
+## this expects a space-separated list of gem names
+#ARG DISCOURSE_ADDITIONAL_GEMS=json
+#RUN if [ "$DISCOURSE_ADDITIONAL_GEMS" != "" ]; then \
+#        echo >> Gemfile ; \
+#        echo '### DISCOURSE_ADDITIONAL_GEMS' >> Gemfile ; \
+#        for GEM_NAME in $DISCOURSE_ADDITIONAL_GEMS; do \
+#            echo "gem \"$GEM_NAME\"" >> Gemfile ; \
+#        done; \
+#    fi
+#
+## run bundler
+## deployment mode if no new gems added, normal mode otherwise
+#RUN if [ "$DISCOURSE_ADDITIONAL_GEMS" != "" ]; then \
+#        bundle install --without test --without development; \
+#    else \
+#        bundle install --deployment --without test --without development; \
+#    fi
+
+# install discourse plugins
+# assumptions: no spaces in URLs (urlencoding is a thing)
+#
+# this expects a git-cloneable link
+ARG DISCOURSE_ADDITIONAL_PLUGINS="https://github.com/beacloudgenius/discourse-theme.git https://github.com/discourse/docker_manager.git https://github.com/discourse/discourse-slack-official.git"
+RUN if [ "$DISCOURSE_ADDITIONAL_PLUGINS" != "" ]; then \
+        mkdir -p plugins ; cd plugins/; \
+        for PACKAGE_LINK in $DISCOURSE_ADDITIONAL_PLUGINS; do \
+            git clone "$PACKAGE_LINK"; \
+        done; \
+    fi
 
 WORKDIR /home/discourse/discourse
 
